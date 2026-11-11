@@ -1,5 +1,7 @@
 package com.rikkei.microservice.identityservice;
 
+import com.rikkei.microservice.identityservice.dto.AuthResponse;
+import com.rikkei.microservice.identityservice.dto.LoginRequest;
 import com.rikkei.microservice.identityservice.dto.RegisterRequest;
 import com.rikkei.microservice.identityservice.dto.UserResponse;
 import com.rikkei.microservice.identityservice.entity.User;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -74,5 +77,61 @@ class IdentityServiceTests {
         assertEquals("test_user", claims.getSubject(), "Subject (sub) claim phải là username");
         assertEquals("ROLE_MANAGER", claims.get("role"), "Role claim phải khớp role của user");
         assertNotNull(claims.getExpiration(), "Token phải có thời gian hết hạn");
+    }
+
+    @Test
+    @DisplayName("Bài 3: Đăng nhập thành công với thông tin đúng -> Trả về Access Token")
+    void testLogin_Success() {
+        authService.register(RegisterRequest.builder()
+                .username("alice")
+                .password("alicePassword123")
+                .role("USER")
+                .build());
+
+        LoginRequest loginRequest = LoginRequest.builder()
+                .username("alice")
+                .password("alicePassword123")
+                .build();
+
+        AuthResponse authResponse = authService.login(loginRequest);
+        assertNotNull(authResponse);
+        assertNotNull(authResponse.getAccessToken());
+        assertEquals("Bearer", authResponse.getTokenType());
+
+        Claims claims = jwtUtil.extractAllClaims(authResponse.getAccessToken());
+        assertEquals("alice", claims.getSubject());
+        assertEquals("USER", claims.get("role"));
+    }
+
+    @Test
+    @DisplayName("Bài 3: Đăng nhập thất bại do sai mật khẩu hoặc sai username -> Ném BadCredentialsException")
+    void testLogin_Failed_BadCredentials() {
+        authService.register(RegisterRequest.builder()
+                .username("alice")
+                .password("alicePassword123")
+                .role("USER")
+                .build());
+
+        // Sai mật khẩu
+        LoginRequest wrongPasswordRequest = LoginRequest.builder()
+                .username("alice")
+                .password("wrongPassword")
+                .build();
+
+        BadCredentialsException ex1 = assertThrows(BadCredentialsException.class, () -> {
+            authService.login(wrongPasswordRequest);
+        });
+        assertEquals("Bad credentials", ex1.getMessage());
+
+        // Sai username (không tồn tại)
+        LoginRequest wrongUsernameRequest = LoginRequest.builder()
+                .username("non_existent_user")
+                .password("anyPassword")
+                .build();
+
+        BadCredentialsException ex2 = assertThrows(BadCredentialsException.class, () -> {
+            authService.login(wrongUsernameRequest);
+        });
+        assertEquals("Bad credentials", ex2.getMessage());
     }
 }

@@ -1,5 +1,7 @@
 package com.rikkei.microservice.identityservice.controller;
 
+import com.rikkei.microservice.identityservice.dto.AuthResponse;
+import com.rikkei.microservice.identityservice.dto.LoginRequest;
 import com.rikkei.microservice.identityservice.dto.RegisterRequest;
 import com.rikkei.microservice.identityservice.dto.UserResponse;
 import com.rikkei.microservice.identityservice.entity.User;
@@ -9,7 +11,10 @@ import com.rikkei.microservice.identityservice.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -24,6 +29,17 @@ public class AuthController {
     public ResponseEntity<UserResponse> register(@RequestBody RegisterRequest request) {
         UserResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        try {
+            AuthResponse response = authService.login(request);
+            return ResponseEntity.ok(response);
+        } catch (BadCredentialsException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized", "message", ex.getMessage()));
+        }
     }
 
     @GetMapping("/test-token")
