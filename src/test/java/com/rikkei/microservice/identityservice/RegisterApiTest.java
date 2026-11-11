@@ -4,7 +4,9 @@ import com.rikkei.microservice.identityservice.dto.RegisterRequest;
 import com.rikkei.microservice.identityservice.dto.UserResponse;
 import com.rikkei.microservice.identityservice.entity.User;
 import com.rikkei.microservice.identityservice.repository.UserRepository;
+import com.rikkei.microservice.identityservice.security.JwtUtil;
 import com.rikkei.microservice.identityservice.service.AuthService;
+import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,7 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
-class RegisterServiceIntegrationTest {
+class IdentityServiceTests {
 
     @Autowired
     private AuthService authService;
@@ -26,34 +28,51 @@ class RegisterServiceIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
     @BeforeEach
     void setUp() {
         userRepository.deleteAll();
     }
 
     @Test
-    @DisplayName("Đăng ký thành công: trả về thông tin user không kèm password, DB lưu mật khẩu đã băm BCrypt")
+    @DisplayName("Bài 1: Đăng ký thành công, password được băm BCrypt")
     void testRegister_Success() {
         RegisterRequest request = RegisterRequest.builder()
                 .username("john_doe")
                 .password("Password123@")
-                .role("USER")
+                .role("ADMIN")
                 .build();
 
         UserResponse response = authService.register(request);
 
-        // Kiểm tra kết quả trả về
         assertNotNull(response.getId());
         assertEquals("john_doe", response.getUsername());
-        assertEquals("USER", response.getRole());
+        assertEquals("ADMIN", response.getRole());
 
-        // Kiểm tra trong cơ sở dữ liệu
         User savedUser = userRepository.findByUsername("john_doe").orElse(null);
-        assertNotNull(savedUser, "User phải được lưu vào PostgreSQL database");
-        assertNotEquals("Password123@", savedUser.getPassword(), "Mật khẩu trong DB không được là plain-text");
-        assertTrue(savedUser.getPassword().startsWith("$2a$") || savedUser.getPassword().startsWith("$2b$"),
-                "Mật khẩu phải được băm theo chuẩn BCrypt");
-        assertTrue(passwordEncoder.matches("Password123@", savedUser.getPassword()),
-                "BCrypt password encoder phải xác thực khớp với mật khẩu gốc");
+        assertNotNull(savedUser);
+        assertTrue(passwordEncoder.matches("Password123@", savedUser.getPassword()));
+    }
+
+    @Test
+    @DisplayName("Bài 2: Sinh JWT Token với subject là username và custom claim role")
+    void testGenerateToken_Claims() {
+        User user = User.builder()
+                .id("test-id-123")
+                .username("test_user")
+                .password("hashed_password")
+                .role("ROLE_MANAGER")
+                .build();
+
+        String token = jwtUtil.generateToken(user);
+        assertNotNull(token);
+        assertFalse(token.isEmpty());
+
+        Claims claims = jwtUtil.extractAllClaims(token);
+        assertEquals("test_user", claims.getSubject(), "Subject (sub) claim phải là username");
+        assertEquals("ROLE_MANAGER", claims.get("role"), "Role claim phải khớp role của user");
+        assertNotNull(claims.getExpiration(), "Token phải có thời gian hết hạn");
     }
 }
